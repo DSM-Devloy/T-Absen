@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Absensi Karyawan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+
+    <div class="container mx-auto p-4 max-w-2xl">
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h1 class="text-2xl font-bold text-center text-blue-600 mb-4">Aplikasi Absensi Online</h1>
+            
+            <!-- Form Absen -->
+            <form id="attendanceForm" class="space-y-4">
+                <div>
+                    <label class="block text-gray-700 font-semibold mb-1">Nama Lengkap</label>
+                    <input type="text" id="name" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-semibold mb-1">ID Karyawan</label>
+                    <input type="text" id="employeeId" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                
+                <!-- Kamera & Selfie -->
+                <div>
+                    <label class="block text-gray-700 font-semibold mb-1">Foto Selfie</label>
+                    <div class="flex flex-col items-center space-y-2">
+                        <video id="video" autoplay playsinline class="w-full max-w-xs rounded-lg border bg-black"></video>
+                        <canvas id="canvas" class="hidden"></canvas>
+                        <button type="button" id="captureBtn" class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700">Ambil Foto</button>
+                        <img id="preview" class="hidden w-32 h-32 object-cover rounded-lg border">
+                    </div>
+                </div>
+
+                <!-- Lokasi -->
+                <div>
+                    <label class="block text-gray-700 font-semibold mb-1">Lokasi Anda</label>
+                    <input type="text" id="location" readonly class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-gray-600" value="Mendeteksi lokasi...">
+                    <input type="hidden" id="latLng">
+                </div>
+
+                <button type="submit" id="submitBtn" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200">Kirim Absen</button>
+            </form>
+        </div>
+
+        <!-- Dashboard Sederhana & Generate PDF -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Dashboard & Report</h2>
+            <div class="mb-4">
+                <p class="text-gray-600">Total Kehadiran Tercatat: <span id="totalCount" class="font-bold text-blue-600">0</span></p>
+            </div>
+            
+            <div class="border-t pt-4">
+                <h3 class="font-semibold text-gray-700 mb-2">Generate Report PDF Periode</h3>
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <input type="date" id="startDate" class="border px-2 py-1 rounded">
+                    <input type="date" id="endDate" class="border px-2 py-1 rounded">
+                </div>
+                <button onclick="generatePDF()" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Download Laporan PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const preview = document.getElementById('preview');
+        const captureBtn = document.getElementById('captureBtn');
+        let capturedImage = null;
+
+        // Akses Kamera
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => { alert("Tidak dapat mengakses kamera!"); });
+
+        // Ambil Foto
+        captureBtn.addEventListener('click', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            capturedImage = canvas.toDataURL('image/jpeg');
+            preview.src = capturedImage;
+            preview.classList.remove('hidden');
+        });
+
+        // Ambil Lokasi GPS
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(position => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                document.getElementById('latLng').value = `${lat}, ${lng}`;
+                document.getElementById('location').value = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+            }, () => {
+                document.getElementById('location').value = "Gagal mendeteksi lokasi (Pastikan GPS aktif)";
+            });
+        }
+
+        // Submit Form
+        document.getElementById('attendanceForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (!capturedImage) {
+                alert("Silakan ambil foto selfie terlebih dahulu!");
+                return;
+            }
+
+            const payload = {
+                name: document.getElementById('name').value,
+                employeeId: document.getElementById('employeeId').value,
+                location: document.getElementById('location').value,
+                latLng: document.getElementById('latLng').value,
+                photo: capturedImage,
+                photoType: 'image/jpeg',
+                status: 'Hadir'
+            };
+
+            document.getElementById('submitBtn').innerText = "Mengirim...";
+            document.getElementById('submitBtn').disabled = true;
+
+            google.script.run
+                .withSuccessHandler(res => {
+                    alert(res.message);
+                    location.reload();
+                })
+                .withFailureHandler(err => {
+                    alert("Terjadi kesalahan: " + err.message);
+                    document.getElementById('submitBtn').disabled = false;
+                    document.getElementById('submitBtn').innerText = "Kirim Absen";
+                })
+                .doPost({ postData: { contents: JSON.stringify(payload) } });
+        });
+
+        // Load Dashboard Count
+        function loadDashboard() {
+            google.script.run.withSuccessHandler(data => {
+                document.getElementById('totalCount').innerText = data.total;
+            }).getDashboardData();
+        }
+        loadDashboard();
+
+        // Generate PDF Sederhana
+        function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.text("Laporan Kehadiran Karyawan", 14, 20);
+            doc.text("Periode: " + document.getElementById('startDate').value + " s/d " + document.getElementById('endDate').value, 14, 30);
+            doc.text("Total Data Tercatat di Sistem: " + document.getElementById('totalCount').innerText, 14, 40);
+            doc.save("Laporan_Absensi.pdf");
+        }
+    </script>
+</body>
+</html>
