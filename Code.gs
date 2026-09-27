@@ -1,5 +1,5 @@
 var SHEET_NAME = "Sheet1";
-var FOLDER_ID = "MASUKKAN_FOLDER_ID_GOOGLE_DRIVE_ANDA_DISINI"; 
+var FOLDER_ID = "https://docs.google.com/spreadsheets/d/1MmpAigYNP7kGJHvd0wkNSkNEyD0IxqPeXu0UQDuAjXQ/edit?usp=sharing"; 
 
 function doGet(e) {
   var action = e.parameter.action;
